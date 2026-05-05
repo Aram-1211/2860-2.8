@@ -23,6 +23,51 @@
 
 #include "portfolioExercise_extra.h"        // Contains routines not essential to the assessment.
 
+/// The struct
+typedef struct {
+    int start;
+    int end;
+    float **M; //2d
+    float *u;
+    float *v;
+    int thread;
+    float *sum;
+    int N;
+} args_t;
+
+void* parralel(void* arguments)
+{
+    // Access fields
+    args_t *args = (args_t*) arguments;
+
+
+    /// MATRIX MULTIPLICATION
+    for (int row = args->start; row < args->end; row++)
+    {
+        args->v[row] = 0.0;
+
+        // Actual matrix multiplication
+        for (int column = 0; column < args->N; column++)
+        {
+            // Matrix mulitplied with vector by element & added to sum
+            args->v[row] = args->v[row] + args->M[row][column] * args->u[column];
+        }
+    }
+
+    // DOT PRODUCT
+    float sumparralel = 0.0;
+
+    for (int i = args->start; i < args->end; i++)
+    {
+        // DOt product by element
+        sumparralel = sumparralel + args->v[i] * args->v[i];
+    }
+
+    // Save
+    args->sum[args->thread] = sumparralel;
+
+    return NULL;
+}
 
 //
 // Main.
@@ -42,7 +87,7 @@ int main( int argc, char **argv )
     if( initialiseMatrixAndVector(N,&M,&u,&v)==-1 ) return EXIT_FAILURE;
 
     // For debugging purposes; only display small problems (e.g., N=8 and nThreads=2 or 4).
-    if( N<=12 ) displayProblem( N, M, u, v );
+    // if( N<=12 ) displayProblem( N, M, u, v );
 
     // Start the timing now.
     struct timespec startTime, endTime;
@@ -53,6 +98,45 @@ int main( int argc, char **argv )
     //
     float dotProduct = 0.0f;        // You should leave the result of your calculation in this variable.
 
+    pthread_t *threads = malloc(nThreads *sizeof(pthread_t));
+    args_t *ranges = malloc(nThreads * sizeof(args_t));
+
+    // for the dot product
+    float *sum = malloc(nThreads * sizeof(float));
+    // initialize cuz garbage values error
+    for (int i = 0; i < nThreads; i++) {
+        sum[i] = 0.0;
+    }
+
+    int data = N / nThreads;
+
+    // Loop over all the threads
+    for (int i = 0; i < nThreads; i++) {
+        ranges[i].start = i*data;
+        ranges[i].end = (i+1)*data;
+
+        // pass the data
+        ranges[i].M = M;
+        ranges[i].u = u;
+        ranges[i].v = v;
+
+        ranges[i].N = N;
+
+        ranges[i].sum = sum;
+        ranges[i].thread = i;
+
+        pthread_create(&threads[i], NULL, parralel, &ranges[i]);
+    }
+
+    // Wait for the thread
+    for (int i = 0; i < nThreads; i++) {
+        pthread_join(threads[i], NULL);
+    }
+
+    // FInal combine
+    for (int i = 0; i < nThreads; i++) {
+        dotProduct = dotProduct + sum[i];
+    }
     // Step 1. Matrix-vector multiplication Mu = v.
 
     // After completing Step 1, you can uncomment the following line to display M, u and v, to check your solution so far.
